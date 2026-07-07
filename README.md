@@ -15,7 +15,7 @@ These scripts are provided by the community and maintained on a voluntary basis.
 
 - Requirements:
   - PowerShell 7+ is recommended
-  - The [official Rubrik RSC SDK for PowerShell] (https://www.powershellgallery.com/packages/RubrikSecurityCloud/) must be installed and imported before running scripts
+  - The [official Rubrik RSC SDK for PowerShell] (https://www.powershellgallery.com/packages/RubrikSecurityCloud/) must be installed and imported before running scripts, unless otherwise expressly stated.
 
 ---
 
