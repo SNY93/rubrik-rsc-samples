@@ -1,0 +1,20 @@
+---
+# Service account JSON file as downloaded from RSC
+# (Settings > Users and Roles > Service Accounts). When set, it takes
+# precedence over the individual rubrik_rsc_client_* variables below.
+rubrik_rsc_service_account_file: "{{ lookup('ansible.builtin.env', 'RSC_SERVICE_ACCOUNT_FILE') }}"
+
+# Alternative to the JSON file, e.g. from Ansible Vault or environment variables.
+rubrik_rsc_client_id: "{{ lookup('ansible.builtin.env', 'RSC_CLIENT_ID') }}"
+rubrik_rsc_client_secret: "{{ lookup('ansible.builtin.env', 'RSC_CLIENT_SECRET') }}"
+rubrik_rsc_access_token_uri: "{{ lookup('ansible.builtin.env', 'RSC_ACCESS_TOKEN_URI') }}"
+
+# HTTP behaviour for every RSC API call.
+rubrik_rsc_validate_certs: true
+rubrik_rsc_timeout: 30
+rubrik_rsc_retries: 3
+rubrik_rsc_delay: 5
+
+# Hide API requests from output (they carry the bearer token). Set to false
+# temporarily when debugging.
+rubrik_rsc_no_log: true

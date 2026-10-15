@@ -1,0 +1,27 @@
+---
+- name: Validate SAP HANA settings
+  ansible.builtin.assert:
+    that:
+      - rubrik_sap_hana_hdbuserstore_key | length > 0
+      - rubrik_host_register_id is defined
+      - rubrik_rsc_cluster_uuid is defined
+    fail_msg: >-
+      Set rubrik_sap_hana_hdbuserstore_key, and run the rubrik_host_register role
+      before this role (it provides rubrik_host_register_id and rubrik_rsc_cluster_uuid).
+    quiet: true
+
+- name: Discover SAP HANA system on host
+  ansible.builtin.import_tasks: discover.yml
+  when: rubrik_sap_hana_sid | length == 0 or rubrik_sap_hana_instance_number | string | length == 0
+
+- name: Set SAP HANA system name
+  ansible.builtin.set_fact:
+    rubrik_sap_hana_sid: "{{ rubrik_sap_hana_sid | upper }}"
+    rubrik_sap_hana_instance_number: "{{ '%02d' | format(rubrik_sap_hana_instance_number | int) }}"
+
+- name: Add SAP HANA system
+  ansible.builtin.import_tasks: add_system.yml
+
+- name: Assign SLA Domain
+  ansible.builtin.import_tasks: assign_sla.yml
+  when: rubrik_sap_hana_sla_name | length > 0

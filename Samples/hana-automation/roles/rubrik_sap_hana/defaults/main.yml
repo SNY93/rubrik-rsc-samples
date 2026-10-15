@@ -1,0 +1,24 @@
+---
+# SAP HANA system to protect. Leave empty to discover it on the host with
+# saphostctrl (works when the host runs exactly one HANA system).
+rubrik_sap_hana_sid: ""
+rubrik_sap_hana_instance_number: ""
+
+# hdbuserstore key Rubrik uses to connect to the system (required). Create it on
+# the host first, for example as the <sid>adm user:
+#   hdbuserstore SET BACKUP <host>:3<nr>13@SYSTEMDB <user> <password>
+rubrik_sap_hana_hdbuserstore_key: ""
+
+# SLA Domain to assign. Leave empty to only add the system without protecting it.
+rubrik_sap_hana_sla_name: ""
+
+# Note stored with the SLA assignment in the RSC audit log.
+rubrik_sap_hana_sla_user_note: "Assigned by Ansible"
+
+# Polling of the asynchronous "add SAP HANA system" job (default: up to 10 minutes).
+rubrik_sap_hana_job_retries: 40
+rubrik_sap_hana_job_delay: 15
+
+# Discovery on the host. saphostctrl needs root (or sapadm) for ListDatabases.
+rubrik_sap_hana_saphostctrl: /usr/sap/hostctrl/exe/saphostctrl
+rubrik_sap_hana_discovery_become: true

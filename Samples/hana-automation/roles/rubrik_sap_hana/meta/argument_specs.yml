@@ -1,0 +1,44 @@
+---
+argument_specs:
+  main:
+    short_description: Add an SAP HANA system to Rubrik and assign an SLA Domain (idempotent).
+    description:
+      - Requires the C(rubrik_rsc) and C(rubrik_host_register) roles to have run for the host.
+      - Sets C(rubrik_sap_hana_object), C(rubrik_sap_hana_added) and C(rubrik_sap_hana_sla_assigned).
+    options:
+      rubrik_sap_hana_sid:
+        type: str
+        default: ""
+        description: HANA SID. Discovered with saphostctrl when empty.
+      rubrik_sap_hana_instance_number:
+        type: str
+        default: ""
+        description: Two-digit HANA instance number. Discovered with saphostctrl when empty.
+      rubrik_sap_hana_hdbuserstore_key:
+        type: str
+        default: ""
+        description: hdbuserstore key Rubrik uses to connect to SYSTEMDB.
+      rubrik_sap_hana_sla_name:
+        type: str
+        default: ""
+        description: SLA Domain to assign. No SLA is assigned when empty.
+      rubrik_sap_hana_sla_user_note:
+        type: str
+        default: Assigned by Ansible
+        description: Note stored with the SLA assignment.
+      rubrik_sap_hana_job_retries:
+        type: int
+        default: 40
+        description: Polls of the add job before giving up.
+      rubrik_sap_hana_job_delay:
+        type: int
+        default: 15
+        description: Seconds between polls of the add job.
+      rubrik_sap_hana_saphostctrl:
+        type: path
+        default: /usr/sap/hostctrl/exe/saphostctrl
+        description: Path to saphostctrl on the host.
+      rubrik_sap_hana_discovery_become:
+        type: bool
+        default: true
+        description: Use privilege escalation for saphostctrl discovery.

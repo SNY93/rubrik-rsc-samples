@@ -1,0 +1,97 @@
+---
+- name: Look up SAP HANA system in RSC
+  ansible.builtin.import_tasks: lookup.yml
+
+- name: Decide whether SAP HANA system needs adding
+  ansible.builtin.set_fact:
+    __rubrik_sap_hana_add_needed: "{{ rubrik_sap_hana_object.id is not defined }}"
+    rubrik_sap_hana_added: false
+
+- name: Add SAP HANA system to Rubrik
+  when: __rubrik_sap_hana_add_needed | bool
+  block:
+    - name: Submit add SAP HANA system request
+      ansible.builtin.import_role:
+        name: rubrik_rsc
+        tasks_from: graphql
+      vars:
+        rubrik_rsc_gql_mutation: true
+        rubrik_rsc_gql_query: |
+          mutation AddSapHanaSystem($input: AddSapHanaSystemInput!) {
+            addSapHanaSystem(input: $input) {
+              asyncRequestStatus { id status error { message } }
+            }
+          }
+        rubrik_rsc_gql_variables:
+          input:
+            clusterUuid: "{{ rubrik_rsc_cluster_uuid }}"
+            sapHanaSystem:
+              sid: "{{ rubrik_sap_hana_sid }}"
+              instanceNumber: "{{ rubrik_sap_hana_instance_number }}"
+              hostIds: ["{{ rubrik_host_register_id }}"]
+              authTypeSpec:
+                authType: SAP_HANA_SYSTEM_AUTH_TYPE_SPEC_AUTH_TYPE_HDB_USERSTORE
+              # With hdbuserstore authentication the key is passed as the password.
+              username: ""
+              password: "{{ rubrik_sap_hana_hdbuserstore_key }}"
+
+    - name: Store add request ID
+      ansible.builtin.set_fact:
+        __rubrik_sap_hana_request: "{{ rubrik_rsc_gql_data.addSapHanaSystem.asyncRequestStatus | default({}) }}"
+
+    - name: Wait for add SAP HANA system job
+      ansible.builtin.uri:
+        url: "{{ rubrik_rsc_graphql_url }}"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ rubrik_rsc_token }}"
+        body_format: json
+        body:
+          query: |
+            query JobInfo($input: JobInfoRequest!) {
+              jobInfo(input: $input) { status }
+            }
+          variables:
+            input:
+              requestId: "{{ __rubrik_sap_hana_request.id }}"
+              clusterUuid: "{{ rubrik_rsc_cluster_uuid }}"
+              type: SAP_HANA_SYSTEM
+              additionalInfo: {}
+        validate_certs: "{{ rubrik_rsc_validate_certs | default(true) }}"
+        timeout: "{{ rubrik_rsc_timeout | default(30) }}"
+      register: __rubrik_sap_hana_job
+      until: (__rubrik_sap_hana_job.json.data.jobInfo.status | default('') | upper) in __rubrik_sap_hana_job_final_states
+      retries: "{{ rubrik_sap_hana_job_retries }}"
+      delay: "{{ rubrik_sap_hana_job_delay }}"
+      failed_when: false
+      when: __rubrik_sap_hana_request.id is defined
+      delegate_to: localhost
+      become: false
+      no_log: "{{ rubrik_rsc_no_log | default(true) }}"
+
+    - name: Check add SAP HANA system result
+      ansible.builtin.assert:
+        that: >-
+          ansible_check_mode
+          or (__rubrik_sap_hana_job.json.data.jobInfo.status | default('') | upper) in __rubrik_sap_hana_job_success_states
+        fail_msg: >-
+          Adding SAP HANA system {{ rubrik_sap_hana_sid }}@{{ rubrik_sap_hana_instance_number }} failed:
+          job status '{{ __rubrik_sap_hana_job.json.data.jobInfo.status | default('unknown') }}'
+          {{ __rubrik_sap_hana_request.error.message | default('') }}.
+          Check the hdbuserstore key '{{ rubrik_sap_hana_hdbuserstore_key }}' and the job in RSC.
+        quiet: true
+
+    - name: Look up added SAP HANA system
+      ansible.builtin.import_tasks: lookup.yml
+      when: not ansible_check_mode
+
+    - name: Record SAP HANA system as added
+      ansible.builtin.set_fact:
+        rubrik_sap_hana_added: true
+
+- name: Show SAP HANA system
+  ansible.builtin.debug:
+    msg: >-
+      SAP HANA system {{ rubrik_sap_hana_sid }}@{{ rubrik_sap_hana_instance_number }}
+      {{ 'added' if rubrik_sap_hana_added else 'already present' }}
+      (ID: {{ rubrik_sap_hana_object.id | default('n/a in check mode') }})

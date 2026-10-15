@@ -1,0 +1,8 @@
+---
+# Name the host is registered under in RSC. Must resolve from the Rubrik
+# cluster, and the Rubrik Backup Service (RBS) agent must already be
+# installed and running on the host.
+rubrik_host_register_hostname: "{{ ansible_facts['fqdn'] | default(inventory_hostname) }}"
+
+# rubrik_rsc_cluster_name (required) selects the Rubrik cluster that protects
+# the host; set it per host or group in the inventory.

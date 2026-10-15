@@ -1,0 +1,46 @@
+---
+# Sets rubrik_sap_hana_object to the RSC SAP HANA system for this SID that runs
+# on this host, or {} if there is none.
+
+- name: Query SAP HANA systems
+  ansible.builtin.import_role:
+    name: rubrik_rsc
+    tasks_from: graphql
+  vars:
+    rubrik_rsc_gql_query: |
+      query SapHanaSystems($filter: [Filter!]) {
+        sapHanaSystems(filter: $filter) {
+          nodes {
+            id
+            name
+            status
+            effectiveSlaDomain { id name }
+            hosts { hostName }
+          }
+        }
+      }
+    rubrik_rsc_gql_variables:
+      filter:
+        - field: NAME
+          texts: ["{{ rubrik_sap_hana_sid }}"]
+        - field: CLUSTER_ID
+          texts: ["{{ rubrik_rsc_cluster_uuid }}"]
+        - field: IS_RELIC
+          texts: ["false"]
+        - field: IS_REPLICATED
+          texts: ["false"]
+
+- name: Reset SAP HANA system match
+  ansible.builtin.set_fact:
+    rubrik_sap_hana_object: {}
+
+# NAME is a substring filter, so match the SID exactly and check the system runs on this host.
+- name: Select SAP HANA system on this host
+  ansible.builtin.set_fact:
+    rubrik_sap_hana_object: "{{ item }}"
+  loop: "{{ rubrik_rsc_gql_data.sapHanaSystems.nodes }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - item.name | upper is match(rubrik_sap_hana_sid ~ '(@|$)')
+    - rubrik_host_register_hostname | lower in (item.hosts | default([]) | map(attribute='hostName') | map('lower'))

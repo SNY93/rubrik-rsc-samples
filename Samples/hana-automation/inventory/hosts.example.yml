@@ -1,0 +1,21 @@
+---
+# Copy to inventory/hosts.yml (git-ignored) and adjust.
+# Use SSH keys for host access; do not put passwords in this file. If you need
+# secrets here, encrypt them with ansible-vault.
+all:
+  children:
+    sap_hana:
+      vars:
+        ansible_user: ansible
+        ansible_become: true
+
+        rubrik_rsc_cluster_name: my-rubrik-cluster
+        rubrik_sap_hana_hdbuserstore_key: BACKUP
+        rubrik_sap_hana_sla_name: Gold-SAP-HANA
+      hosts:
+        hana01.example.com:
+        hana02.example.com:
+          # Different cluster, and explicit SID / instance instead of discovery.
+          rubrik_rsc_cluster_name: my-other-rubrik-cluster
+          rubrik_sap_hana_sid: HDB
+          rubrik_sap_hana_instance_number: "00"

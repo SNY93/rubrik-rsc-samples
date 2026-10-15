@@ -1,0 +1,12 @@
+# Local inventory and credentials - never commit
+inventory/hosts.yml
+inventory/hosts.ini
+*service-account*.json
+vault.yml
+.vault_pass*
+
+# Runtime artefacts
+*.log
+*.retry
+.ansible/
+.venv/

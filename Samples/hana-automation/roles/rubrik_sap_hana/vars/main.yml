@@ -1,0 +1,4 @@
+---
+# Terminal job states returned by jobInfo for the add SAP HANA system request.
+__rubrik_sap_hana_job_success_states: [SUCCESS, SUCCEEDED]
+__rubrik_sap_hana_job_final_states: [SUCCESS, SUCCEEDED, FAILURE, FAILED, CANCELED, CANCELLED]

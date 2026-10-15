@@ -1,0 +1,47 @@
+---
+# Finds SID and instance number of the HANA system on the host. ListDatabases
+# tells which SIDs are HANA databases (SYSTEMDB@<SID>), ListInstances maps each
+# SID to its instance number ("Inst Info : <SID> - <NR> - <host> - ...").
+
+- name: List SAP databases
+  ansible.builtin.command:
+    argv: ["{{ rubrik_sap_hana_saphostctrl }}", -function, ListDatabases]
+  register: __rubrik_sap_hana_databases
+  changed_when: false
+  check_mode: false
+  become: "{{ rubrik_sap_hana_discovery_become }}"
+
+- name: List SAP instances
+  ansible.builtin.command:
+    argv: ["{{ rubrik_sap_hana_saphostctrl }}", -function, ListInstances]
+  register: __rubrik_sap_hana_instances
+  changed_when: false
+  check_mode: false
+  become: "{{ rubrik_sap_hana_discovery_become }}"
+
+- name: Parse HANA systems
+  ansible.builtin.set_fact:
+    __rubrik_sap_hana_found: >-
+      {{ __instances | dict2items
+         | selectattr('key', 'in', __hana_sids)
+         | selectattr('key', 'in', [rubrik_sap_hana_sid | upper] if rubrik_sap_hana_sid | length > 0 else __hana_sids)
+         | list }}
+  vars:
+    # SID -> instance number, from lines like "Inst Info : HDB - 00 - host - ..."
+    __instances: "{{ dict(__rubrik_sap_hana_instances.stdout | regex_findall('Inst Info\\s*:\\s*([A-Z0-9]{3})\\s*-\\s*([0-9]{2})\\s*-')) }}"
+    # SIDs that are HANA databases, from "Database name: SYSTEMDB@HDB"
+    __hana_sids: "{{ __rubrik_sap_hana_databases.stdout | regex_findall('SYSTEMDB@([A-Z0-9]{3})') | unique }}"
+
+- name: Check exactly one HANA system was found
+  ansible.builtin.assert:
+    that: __rubrik_sap_hana_found | length == 1
+    fail_msg: >-
+      Found {{ __rubrik_sap_hana_found | length }} matching HANA system(s) on {{ inventory_hostname }}
+      ({{ __rubrik_sap_hana_found | map(attribute='key') | join(', ') or 'none' }}).
+      Set rubrik_sap_hana_sid and rubrik_sap_hana_instance_number for this host.
+    quiet: true
+
+- name: Store discovered HANA system
+  ansible.builtin.set_fact:
+    rubrik_sap_hana_sid: "{{ __rubrik_sap_hana_found[0].key }}"
+    rubrik_sap_hana_instance_number: "{{ __rubrik_sap_hana_found[0].value }}"

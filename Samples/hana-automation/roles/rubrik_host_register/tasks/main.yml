@@ -1,0 +1,57 @@
+---
+- name: Resolve Rubrik cluster
+  ansible.builtin.import_role:
+    name: rubrik_rsc
+    tasks_from: resolve_cluster
+  when: rubrik_rsc_cluster_uuid is not defined
+
+- name: Look up host in RSC
+  ansible.builtin.import_tasks: lookup.yml
+
+# Conditions on a block are re-evaluated for every task, so freeze the decision first.
+- name: Decide whether host needs registering
+  ansible.builtin.set_fact:
+    __rubrik_host_register_needed: "{{ rubrik_host_register_id | length == 0 }}"
+    rubrik_host_register_changed: false
+
+- name: Register host with Rubrik cluster
+  when: __rubrik_host_register_needed | bool
+  block:
+    - name: Register host
+      ansible.builtin.import_role:
+        name: rubrik_rsc
+        tasks_from: graphql
+      vars:
+        rubrik_rsc_gql_mutation: true
+        rubrik_rsc_gql_query: |
+          mutation RegisterHost($clusterUuid: String!, $hosts: [HostRegisterInput!]!) {
+            bulkRegisterHost(input: {clusterUuid: $clusterUuid, hosts: $hosts}) {
+              data { hostSummary { id hostname status } }
+            }
+          }
+        rubrik_rsc_gql_variables:
+          clusterUuid: "{{ rubrik_rsc_cluster_uuid }}"
+          hosts:
+            - hostname: "{{ rubrik_host_register_hostname }}"
+              isOracleHost: false
+              osType: HOST_REGISTER_OS_TYPE_LINUX
+
+    - name: Store new host ID
+      ansible.builtin.set_fact:
+        rubrik_host_register_id: "{{ rubrik_rsc_gql_data.bulkRegisterHost.data[0].hostSummary.id | default('') }}"
+        rubrik_host_register_changed: true
+
+    - name: Check host registration result
+      ansible.builtin.assert:
+        that: ansible_check_mode or rubrik_host_register_id | length > 0
+        fail_msg: >-
+          RSC did not return a host ID for {{ rubrik_host_register_hostname }}. Check that the RBS
+          agent is installed and the name resolves from cluster {{ rubrik_rsc_cluster_name }}.
+        quiet: true
+
+- name: Show host registration
+  ansible.builtin.debug:
+    msg: >-
+      Host {{ rubrik_host_register_hostname }}
+      {{ 'registered' if rubrik_host_register_changed else 'already registered' }}
+      on {{ rubrik_rsc_cluster_name }} (ID: {{ rubrik_host_register_id or 'n/a in check mode' }})

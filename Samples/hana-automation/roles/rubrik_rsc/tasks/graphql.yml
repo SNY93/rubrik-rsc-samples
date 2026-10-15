@@ -1,0 +1,60 @@
+---
+# Run one GraphQL request against RSC. Used by the other roles via:
+#
+#   ansible.builtin.import_role:
+#     name: rubrik_rsc
+#     tasks_from: graphql
+#   vars:
+#     rubrik_rsc_gql_query: "query ... { ... }"
+#     rubrik_rsc_gql_variables: {}        # optional
+#     rubrik_rsc_gql_mutation: false      # true: report changed, skip in check mode
+#     rubrik_rsc_gql_fail_on_errors: true # false: return errors to the caller
+#
+# Requires rubrik_rsc_graphql_url and rubrik_rsc_token (set by the role's main tasks).
+# Sets rubrik_rsc_gql_data (the response "data" object) and rubrik_rsc_gql_errors
+# (list of error messages). Copy what you need right away; the next call overwrites them.
+
+- name: Send GraphQL request to RSC
+  ansible.builtin.uri:
+    url: "{{ rubrik_rsc_graphql_url }}"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ rubrik_rsc_token }}"
+    body_format: json
+    body:
+      query: "{{ rubrik_rsc_gql_query }}"
+      variables: "{{ rubrik_rsc_gql_variables | default({}) }}"
+    validate_certs: "{{ rubrik_rsc_validate_certs | default(true) }}"
+    timeout: "{{ rubrik_rsc_timeout | default(30) }}"
+    return_content: true
+  register: __rubrik_rsc_gql_response
+  until: __rubrik_rsc_gql_response is skipped or __rubrik_rsc_gql_response.status == 200 or __rubrik_rsc_gql_response.status in range(400, 500)
+  retries: "{{ rubrik_rsc_retries | default(3) }}"
+  delay: "{{ rubrik_rsc_delay | default(5) }}"
+  failed_when: false
+  changed_when: rubrik_rsc_gql_mutation | default(false) | bool
+  # Queries are read-only and always run; mutations honour check mode.
+  check_mode: "{{ ansible_check_mode if (rubrik_rsc_gql_mutation | default(false) | bool) else false }}"
+  delegate_to: localhost
+  become: false
+  no_log: "{{ rubrik_rsc_no_log | default(true) | bool }}"
+
+- name: Check GraphQL response
+  ansible.builtin.assert:
+    that:
+      - __rubrik_rsc_gql_response is skipped or __rubrik_rsc_gql_response.status == 200
+      - >-
+        __rubrik_rsc_gql_response is skipped
+        or not (rubrik_rsc_gql_fail_on_errors | default(true) | bool)
+        or __rubrik_rsc_gql_response.json.errors | default([]) | length == 0
+    fail_msg: >-
+      RSC GraphQL request '{{ rubrik_rsc_gql_query | regex_search('(query|mutation)\s+\w+') | default('anonymous', true) }}'
+      failed (HTTP {{ __rubrik_rsc_gql_response.status | default('n/a') }}):
+      {{ __rubrik_rsc_gql_response.json.errors | default([]) | map(attribute='message') | join('; ')
+         or __rubrik_rsc_gql_response.content | default(__rubrik_rsc_gql_response.msg | default('no details')) | truncate(1000) }}
+    quiet: true
+
+- name: Return GraphQL result
+  ansible.builtin.set_fact:
+    rubrik_rsc_gql_data: "{{ __rubrik_rsc_gql_response.json.data | default({}, true) }}"
+    rubrik_rsc_gql_errors: "{{ __rubrik_rsc_gql_response.json.errors | default([]) | map(attribute='message') | list }}"

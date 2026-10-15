@@ -1,0 +1,74 @@
+---
+- name: Query SLA Domain
+  ansible.builtin.import_role:
+    name: rubrik_rsc
+    tasks_from: graphql
+  vars:
+    rubrik_rsc_gql_query: |
+      query SlaDomains($filter: [GlobalSlaFilterInput!]) {
+        slaDomains(filter: $filter) {
+          nodes { id name }
+        }
+      }
+    rubrik_rsc_gql_variables:
+      filter:
+        - field: NAME
+          text: "{{ rubrik_sap_hana_sla_name }}"
+
+# NAME is a substring filter, so match the name exactly.
+- name: Select SLA Domain by exact name
+  ansible.builtin.set_fact:
+    __rubrik_sap_hana_sla: >-
+      {{ rubrik_rsc_gql_data.slaDomains.nodes
+         | selectattr('name', 'equalto', rubrik_sap_hana_sla_name) | first | default({}) }}
+
+- name: Check SLA Domain was found
+  ansible.builtin.assert:
+    that: __rubrik_sap_hana_sla.id is defined
+    fail_msg: "SLA Domain '{{ rubrik_sap_hana_sla_name }}' was not found in RSC."
+    quiet: true
+
+- name: Decide whether SLA Domain needs assigning
+  ansible.builtin.set_fact:
+    __rubrik_sap_hana_sla_needed: >-
+      {{ rubrik_sap_hana_object.id is defined
+         and (rubrik_sap_hana_object.effectiveSlaDomain.id | default('')) != __rubrik_sap_hana_sla.id }}
+    rubrik_sap_hana_sla_assigned: false
+
+- name: Assign SLA Domain to SAP HANA system
+  when: __rubrik_sap_hana_sla_needed | bool
+  block:
+    - name: Assign SLA Domain
+      ansible.builtin.import_role:
+        name: rubrik_rsc
+        tasks_from: graphql
+      vars:
+        rubrik_rsc_gql_mutation: true
+        rubrik_rsc_gql_query: |
+          mutation AssignSla($input: AssignSlaInput!) {
+            assignSla(input: $input) { success }
+          }
+        rubrik_rsc_gql_variables:
+          input:
+            slaOptionalId: "{{ __rubrik_sap_hana_sla.id }}"
+            slaDomainAssignType: protectWithSlaId
+            objectIds: ["{{ rubrik_sap_hana_object.id }}"]
+            userNote: "{{ rubrik_sap_hana_sla_user_note }}"
+
+    - name: Check SLA Domain assignment result
+      ansible.builtin.assert:
+        that: ansible_check_mode or rubrik_rsc_gql_data.assignSla.success | default(false) | bool
+        fail_msg: "RSC did not confirm the SLA Domain assignment for {{ rubrik_sap_hana_sid }}."
+        quiet: true
+
+    - name: Record SLA Domain as assigned
+      ansible.builtin.set_fact:
+        rubrik_sap_hana_sla_assigned: true
+
+- name: Show SLA Domain
+  ansible.builtin.debug:
+    msg: >-
+      SLA Domain '{{ rubrik_sap_hana_sla_name }}'
+      {{ 'assigned (was ' ~ (rubrik_sap_hana_object.effectiveSlaDomain.name | default('none')) ~ ')'
+         if rubrik_sap_hana_sla_assigned else 'already assigned' }}
+  when: rubrik_sap_hana_object.id is defined
