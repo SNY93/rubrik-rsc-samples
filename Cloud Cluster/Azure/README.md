@@ -17,7 +17,7 @@ This script manually bootstraps a **Rubrik Cloud Cluster ES (CCES)** deployed in
 | RBAC Role | Cluster View & Cluster Add
 | CCES VMs deployed | VMs must already be provisioned from the **Rubrik CDM marketplace image** (ARM template or Terraform), one per Availability Zone |
 | Availability Zones | Each node must be deployed in a distinct AZ (e.g. node 1 → AZ1, node 2 → AZ2, node 3 → AZ3). The script reads the AZ from the VM and uses it as the `chassisId` for that node |
-| Managed identity | User-assigned managed identity attached to each CCES VM with Storage Blob Data Contributor on the blob container |
+| Managed identity | User-assigned managed identity attached to each CCES VM with custom least privileged role |
 | Blob container | Container must exist in the target storage account before running |
 
 ---
