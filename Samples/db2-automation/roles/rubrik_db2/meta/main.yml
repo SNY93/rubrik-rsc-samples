@@ -1,0 +1,15 @@
+---
+galaxy_info:
+  role_name: rubrik_db2
+  author: Fabian Boltze
+  description: Add an IBM Db2 instance to Rubrik Security Cloud and assign an SLA Domain.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: EL
+      versions: [all]
+    - name: Ubuntu
+      versions: [all]
+  galaxy_tags: [rubrik, backup, ibm, db2]
+# Uses rubrik_rsc (tasks_from) at runtime; run rubrik_rsc and rubrik_host_register first.
+dependencies: []

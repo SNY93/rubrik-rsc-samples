@@ -1,0 +1,20 @@
+---
+# Protects one Db2 instance. Included once per instance by main.yml, which passes the name
+# as rubrik_db2_instance_name (the loop variable).
+
+- name: Add Db2 instance
+  ansible.builtin.import_tasks: add_instance.yml
+
+- name: Assign SLA Domain
+  ansible.builtin.import_tasks: assign_sla.yml
+  when: rubrik_db2_sla_name | length > 0
+
+- name: Detect HADR on the host
+  ansible.builtin.import_tasks: discover_hadr.yml
+  when: rubrik_db2_sla_name | length > 0
+
+- name: Assign SLA Domain to HADR databases
+  ansible.builtin.import_tasks: assign_hadr_sla.yml
+  when:
+    - rubrik_db2_sla_name | length > 0
+    - rubrik_db2_object.id is defined

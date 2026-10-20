@@ -1,0 +1,100 @@
+---
+- name: Look up Db2 instance in RSC
+  ansible.builtin.import_tasks: lookup.yml
+
+- name: Decide whether Db2 instance needs adding
+  ansible.builtin.set_fact:
+    __rubrik_db2_add_needed: "{{ rubrik_db2_object.id is not defined }}"
+    rubrik_db2_added: false
+
+- name: Add Db2 instance to Rubrik
+  when: __rubrik_db2_add_needed | bool
+  block:
+    - name: Submit add Db2 instance request
+      ansible.builtin.import_role:
+        name: rubrik_rsc
+        tasks_from: graphql
+      vars:
+        rubrik_rsc_gql_mutation: true
+        rubrik_rsc_gql_query: |
+          mutation AddDb2Instance($input: AddDb2InstanceInput!) {
+            addDb2Instance(input: $input) {
+              id
+              asyncRequestStatus { id }
+            }
+          }
+        rubrik_rsc_gql_variables:
+          input:
+            clusterUuid: "{{ rubrik_rsc_cluster_uuid }}"
+            db2InstanceRequestConfig:
+              instanceName: "{{ rubrik_db2_instance_name }}"
+              hostIds: ["{{ rubrik_host_register_id }}"]
+              # Credential-less, like the RSC UI. The API requires both fields and rejects
+              # empty strings ("username not provided"), so send a single space, as the UI does.
+              username: " "
+              password: " "
+
+    # There is no documented status query for this request, so wait until the
+    # instance shows up in RSC. The poll sends no credentials.
+    - name: Wait for Db2 instance to appear in RSC
+      ansible.builtin.uri:
+        url: "{{ rubrik_rsc_graphql_url }}"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ rubrik_rsc_token }}"
+        body_format: json
+        body:
+          query: |
+            query Db2Instances($filter: [Filter!]) {
+              db2Instances(filter: $filter) {
+                nodes { name cluster { id } }
+              }
+            }
+          variables:
+            filter:
+              - field: NAME
+                texts: ["{{ rubrik_db2_instance_name }}"]
+              - field: IS_RELIC
+                texts: ["false"]
+              - field: IS_REPLICATED
+                texts: ["false"]
+        validate_certs: "{{ rubrik_rsc_validate_certs | default(true) }}"
+        timeout: "{{ rubrik_rsc_timeout | default(30) }}"
+      register: __rubrik_db2_poll
+      until: >-
+        (__rubrik_db2_poll.json.data.db2Instances.nodes | default([])
+         | selectattr('name', 'equalto', rubrik_db2_instance_name)
+         | selectattr('cluster.id', 'equalto', rubrik_rsc_cluster_uuid)
+         | list | length) > 0
+      retries: "{{ rubrik_db2_job_retries }}"
+      delay: "{{ rubrik_db2_job_delay }}"
+      failed_when: false
+      check_mode: false
+      when: not ansible_check_mode
+      delegate_to: localhost
+      become: false
+      no_log: "{{ rubrik_rsc_no_log | default(true) }}"
+
+    - name: Look up added Db2 instance
+      ansible.builtin.import_tasks: lookup.yml
+      when: not ansible_check_mode
+
+    - name: Check Db2 instance was added
+      ansible.builtin.assert:
+        that: ansible_check_mode or rubrik_db2_object.id is defined
+        fail_msg: >-
+          Db2 instance {{ rubrik_db2_instance_name }} did not appear in RSC after
+          {{ rubrik_db2_job_retries * rubrik_db2_job_delay }} seconds.
+          Check that the RBS agent is running on the host and the add request in RSC.
+        quiet: true
+
+    - name: Record Db2 instance as added
+      ansible.builtin.set_fact:
+        rubrik_db2_added: true
+
+- name: Show Db2 instance
+  ansible.builtin.debug:
+    msg: >-
+      Db2 instance {{ rubrik_db2_instance_name }}
+      {{ 'added' if rubrik_db2_added else 'already present' }}
+      (ID: {{ rubrik_db2_object.id | default('n/a in check mode') }})

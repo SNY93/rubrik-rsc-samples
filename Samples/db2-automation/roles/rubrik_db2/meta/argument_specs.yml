@@ -1,0 +1,49 @@
+---
+argument_specs:
+  main:
+    short_description: Add a Db2 instance to Rubrik and assign an SLA Domain (idempotent).
+    description:
+      - Requires the C(rubrik_rsc) and C(rubrik_host_register) roles to have run for the host.
+      - Handles every Db2 instance on the host, one after the other.
+      - Sets C(rubrik_db2_object), C(rubrik_db2_added) and C(rubrik_db2_sla_assigned) for the last instance.
+      - Rubrik discovers the databases of an added instance automatically.
+    options:
+      rubrik_db2_instances:
+        type: list
+        elements: str
+        default: []
+        description: >-
+          Db2 instance names to protect. Every instance reported by db2ilist on the host when
+          empty.
+      rubrik_db2_sla_name:
+        type: str
+        default: ""
+        description: >-
+          SLA Domain to assign to the instance and to its HADR databases. No SLA is assigned
+          when empty.
+      rubrik_db2_hadr_expected:
+        type: raw
+        default: ""
+        description: >-
+          Override for the HADR detection on the host. Empty detects it. true waits for the HADR
+          entity to appear in RSC and fails if it does not, false never waits.
+      rubrik_db2_sla_user_note:
+        type: str
+        default: Assigned by Ansible
+        description: Note stored with the SLA assignment.
+      rubrik_db2_job_retries:
+        type: int
+        default: 40
+        description: Polls for the new instance in RSC before giving up.
+      rubrik_db2_job_delay:
+        type: int
+        default: 15
+        description: Seconds between polls.
+      rubrik_db2_ilist:
+        type: path
+        default: /opt/ibm/db2/V11.5/instance/db2ilist
+        description: Path to db2ilist on the host. Depends on the installed Db2 version.
+      rubrik_db2_discovery_become:
+        type: bool
+        default: true
+        description: Use privilege escalation for db2ilist discovery.

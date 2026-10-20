@@ -1,0 +1,47 @@
+---
+# Protect IBM Db2 instances with Rubrik Security Cloud (RSC):
+#   1. authenticate to RSC once (service account, from the control node)
+#   2. register each host with its Rubrik cluster (RBS agent must be installed)
+#   3. add the Db2 instance on the host to RSC and assign an SLA Domain
+#
+# Every step checks the current state first, so the playbook is safe to re-run.
+#
+# Usage:
+#   ansible-playbook protect_db2.yml -i inventory/hosts.yml
+#   ansible-playbook protect_db2.yml -i inventory/hosts.yml --check     # dry run
+#   ansible-playbook protect_db2.yml -i inventory/hosts.yml --tags register
+#
+# Provided "as is", without warranty of any kind. See LICENSE in the repository root.
+
+- name: Authenticate to Rubrik Security Cloud
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tags: [always]
+  roles:
+    - role: rubrik_rsc
+
+- name: Protect Db2 instances with Rubrik
+  hosts: "{{ target_hosts | default('db2') }}"
+  gather_facts: true
+  vars:
+    # Share the token from the first play instead of logging in once per host.
+    rubrik_rsc_token: "{{ hostvars['localhost']['rubrik_rsc_token'] }}"
+    rubrik_rsc_url: "{{ hostvars['localhost']['rubrik_rsc_url'] }}"
+    rubrik_rsc_graphql_url: "{{ hostvars['localhost']['rubrik_rsc_graphql_url'] }}"
+  roles:
+    - role: rubrik_host_register
+      tags: [register]
+    - role: rubrik_db2
+      tags: [db2]
+
+- name: Close Rubrik Security Cloud session
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tags: [always]
+  tasks:
+    - name: Revoke RSC session
+      ansible.builtin.import_role:
+        name: rubrik_rsc
+        tasks_from: logout

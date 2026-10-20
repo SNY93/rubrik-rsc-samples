@@ -1,0 +1,121 @@
+---
+# HADR databases do not inherit the SLA Domain of their Db2 instance (RSC docs), so assign it
+# to them explicitly. Uses __rubrik_db2_sla from assign_sla.yml.
+#
+# RSC discovers an HADR entity once the primary instance is added, and that happens
+# asynchronously after the add request. discover_hadr.yml sets __rubrik_db2_hadr_wait when the
+# host runs an HADR primary; the role then waits for the entity and fails if it never shows
+# up. Otherwise whatever HADR databases exist right now are handled.
+
+- name: Define HADR database filter
+  ansible.builtin.set_fact:
+    __rubrik_db2_hadr_filter:
+      - field: DB2_INSTANCE_ID
+        texts: ["{{ rubrik_db2_object.id }}"]
+      - field: DB2_DB_TYPE
+        texts: ["HADR", "HADR_PURESCALE"]
+      - field: IS_RELIC
+        texts: ["false"]
+      - field: IS_REPLICATED
+        texts: ["false"]
+
+# The poll sends no credentials beyond the bearer token.
+- name: Wait for HADR databases to appear in RSC
+  ansible.builtin.uri:
+    url: "{{ rubrik_rsc_graphql_url }}"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ rubrik_rsc_token }}"
+    body_format: json
+    body:
+      query: |
+        query Db2HadrDatabases($filter: [Filter!]) {
+          db2Databases(filter: $filter) { count }
+        }
+      variables:
+        filter: "{{ __rubrik_db2_hadr_filter }}"
+    validate_certs: "{{ rubrik_rsc_validate_certs | default(true) }}"
+    timeout: "{{ rubrik_rsc_timeout | default(30) }}"
+  register: __rubrik_db2_hadr_poll
+  until: (__rubrik_db2_hadr_poll.json.data.db2Databases.count | default(0)) > 0
+  retries: "{{ rubrik_db2_job_retries }}"
+  delay: "{{ rubrik_db2_job_delay }}"
+  failed_when: false
+  check_mode: false
+  when: __rubrik_db2_hadr_wait | bool
+  delegate_to: localhost
+  become: false
+  no_log: "{{ rubrik_rsc_no_log | default(true) }}"
+
+- name: Query HADR databases of Db2 instance
+  ansible.builtin.import_role:
+    name: rubrik_rsc
+    tasks_from: graphql
+  vars:
+    rubrik_rsc_gql_query: |
+      query Db2HadrDatabases($filter: [Filter!]) {
+        db2Databases(first: 1000, filter: $filter) {
+          nodes {
+            id
+            name
+            effectiveSlaDomain { id name }
+          }
+        }
+      }
+    rubrik_rsc_gql_variables:
+      filter: "{{ __rubrik_db2_hadr_filter }}"
+
+- name: Select HADR databases that need the SLA Domain
+  ansible.builtin.set_fact:
+    __rubrik_db2_hadr_found: "{{ rubrik_rsc_gql_data.db2Databases.nodes }}"
+    __rubrik_db2_hadr_todo: >-
+      {{ rubrik_rsc_gql_data.db2Databases.nodes
+         | rejectattr('effectiveSlaDomain.id', 'equalto', __rubrik_db2_sla.id) | list }}
+    rubrik_db2_hadr_sla_assigned: false
+
+- name: Check HADR databases were found
+  ansible.builtin.assert:
+    that: not (__rubrik_db2_hadr_wait | bool) or __rubrik_db2_hadr_found | length > 0
+    fail_msg: >-
+      This host runs an HADR primary, but no HADR database was found in RSC for Db2 instance
+      {{ rubrik_db2_instance_name }} after {{ rubrik_db2_job_retries * rubrik_db2_job_delay }}
+      seconds. Refresh the HADR entity in RSC and check the instance status.
+    quiet: true
+
+- name: Assign SLA Domain to HADR databases
+  when: __rubrik_db2_hadr_todo | length > 0
+  block:
+    - name: Assign SLA Domain
+      ansible.builtin.import_role:
+        name: rubrik_rsc
+        tasks_from: graphql
+      vars:
+        rubrik_rsc_gql_mutation: true
+        rubrik_rsc_gql_query: |
+          mutation AssignSla($input: AssignSlaInput!) {
+            assignSla(input: $input) { success }
+          }
+        rubrik_rsc_gql_variables:
+          input:
+            slaOptionalId: "{{ __rubrik_db2_sla.id }}"
+            slaDomainAssignType: protectWithSlaId
+            objectIds: "{{ __rubrik_db2_hadr_todo | map(attribute='id') | list }}"
+            userNote: "{{ rubrik_db2_sla_user_note }}"
+
+    - name: Check HADR SLA Domain assignment result
+      ansible.builtin.assert:
+        that: ansible_check_mode or rubrik_rsc_gql_data.assignSla.success | default(false) | bool
+        fail_msg: "RSC did not confirm the SLA Domain assignment for the HADR databases of {{ rubrik_db2_instance_name }}."
+        quiet: true
+
+    - name: Record HADR SLA Domain as assigned
+      ansible.builtin.set_fact:
+        rubrik_db2_hadr_sla_assigned: true
+
+- name: Show HADR databases
+  ansible.builtin.debug:
+    msg: >-
+      {{ __rubrik_db2_hadr_found | length }} HADR database(s) on {{ rubrik_db2_instance_name }}
+      ({{ __rubrik_db2_hadr_found | map(attribute='name') | join(', ') or 'none' }}):
+      SLA Domain '{{ rubrik_db2_sla_name }}'
+      {{ 'assigned to ' ~ (__rubrik_db2_hadr_todo | length) if rubrik_db2_hadr_sla_assigned else 'already assigned' }}

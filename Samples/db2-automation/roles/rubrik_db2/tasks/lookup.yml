@@ -1,0 +1,49 @@
+---
+# Sets rubrik_db2_object to the RSC Db2 instance with this name that runs on this
+# host, or {} if there is none.
+
+- name: Query Db2 instances
+  ansible.builtin.import_role:
+    name: rubrik_rsc
+    tasks_from: graphql
+  vars:
+    rubrik_rsc_gql_query: |
+      query Db2Instances($filter: [Filter!]) {
+        db2Instances(filter: $filter) {
+          nodes {
+            id
+            name
+            status
+            statusMessage
+            effectiveSlaDomain { id name }
+            cluster { id name }
+            hosts { id name }
+          }
+        }
+      }
+    rubrik_rsc_gql_variables:
+      filter:
+        - field: NAME
+          texts: ["{{ rubrik_db2_instance_name }}"]
+        - field: IS_RELIC
+          texts: ["false"]
+        - field: IS_REPLICATED
+          texts: ["false"]
+
+- name: Reset Db2 instance match
+  ansible.builtin.set_fact:
+    rubrik_db2_object: {}
+
+# NAME is a substring filter, so match the name exactly, and check the cluster and host.
+- name: Select Db2 instance on this host
+  ansible.builtin.set_fact:
+    rubrik_db2_object: "{{ item }}"
+  loop: "{{ rubrik_rsc_gql_data.db2Instances.nodes }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - item.name | lower == rubrik_db2_instance_name | lower
+    - (item.cluster.id | default('')) == rubrik_rsc_cluster_uuid
+    - >-
+      rubrik_host_register_id in (item.hosts | default([]) | map(attribute='id'))
+      or rubrik_host_register_hostname | lower in (item.hosts | default([]) | map(attribute='name') | map('lower'))

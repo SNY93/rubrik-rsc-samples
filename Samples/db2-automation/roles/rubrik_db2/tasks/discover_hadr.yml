@@ -1,0 +1,47 @@
+---
+# Decides whether to wait for an HADR entity in RSC (__rubrik_db2_hadr_wait). RSC creates the
+# entity when the primary instance is added, so only a host that runs an HADR primary waits.
+# The host is asked as the instance owner. rubrik_db2_hadr_expected overrides this when set.
+
+- name: Use HADR override
+  ansible.builtin.set_fact:
+    __rubrik_db2_hadr_wait: "{{ rubrik_db2_hadr_expected | bool }}"
+  when: rubrik_db2_hadr_expected | string | length > 0
+
+- name: Detect HADR on the host
+  when: rubrik_db2_hadr_expected | string | length == 0
+  block:
+    # The script is piped over stdin so that no temporary file has to be readable by the
+    # instance owner.
+    - name: Get HADR role of local databases
+      ansible.builtin.command:
+        argv: [/bin/bash, -s]
+        stdin: "{{ lookup('ansible.builtin.file', 'hadr_status.sh') }}"
+      register: __rubrik_db2_hadr_status
+      changed_when: false
+      failed_when: false
+      check_mode: false
+      become: "{{ rubrik_db2_discovery_become }}"
+      # On Linux the instance owner has the name of the instance, e.g. db2inst1.
+      become_user: "{{ rubrik_db2_instance_name }}"
+
+    # A database whose role is unknown counts as primary, so that a missing entity fails loudly
+    # instead of leaving it unprotected.
+    - name: Decide whether to wait for HADR
+      ansible.builtin.set_fact:
+        __rubrik_db2_hadr_wait: >-
+          {{ __rubrik_db2_hadr_status.rc | default(1) == 0
+             and (__rubrik_db2_hadr_status.stdout_lines | default([])
+                  | map('trim') | reject('equalto', '')
+                  | map('split', ' ') | map('last')
+                  | reject('equalto', 'STANDBY') | list | length) > 0 }}
+
+    - name: Show HADR detection
+      ansible.builtin.debug:
+        msg: >-
+          {{ 'HADR detection failed on ' ~ inventory_hostname ~ ': '
+             ~ (__rubrik_db2_hadr_status.stderr | default('no output') | trim)
+             ~ '. Not waiting for an HADR entity; set rubrik_db2_hadr_expected to override.'
+             if __rubrik_db2_hadr_status.rc | default(1) != 0
+             else 'HADR databases on ' ~ inventory_hostname ~ ': '
+             ~ (__rubrik_db2_hadr_status.stdout_lines | default([]) | map('trim') | reject('equalto', '') | join(', ') or 'none') }}

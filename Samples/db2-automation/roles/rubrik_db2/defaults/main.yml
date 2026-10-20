@@ -1,0 +1,28 @@
+---
+# Db2 instances to protect, as a list of names. Leave empty to protect every instance
+# that db2ilist reports on the host.
+rubrik_db2_instances: []
+
+# SLA Domain to assign. Leave empty to only add the instance without protecting it.
+# It is also assigned to the HADR databases of the instance, because those do not
+# inherit the SLA Domain of their instance.
+rubrik_db2_sla_name: ""
+
+# HADR is detected on the host as the instance owner (db2pd). On a host that runs an HADR
+# primary the role waits for RSC to discover the HADR entity (see rubrik_db2_job_retries)
+# and fails if it does not show up. Leave empty for that automatic detection; set true or
+# false only to override it, e.g. when db2pd cannot be run on the host.
+rubrik_db2_hadr_expected: ""
+
+# Note stored with the SLA assignment in the RSC audit log.
+rubrik_db2_sla_user_note: "Assigned by Ansible"
+
+# Polling after the asynchronous "add Db2 instance" request (default: up to 10 minutes).
+# The instance has been added once it shows up in RSC.
+rubrik_db2_job_retries: 40
+rubrik_db2_job_delay: 15
+
+# Discovery on the host. The path depends on the installed Db2 version; adjust it
+# (e.g. /opt/ibm/db2/V12.1/instance/db2ilist) or set rubrik_db2_instances.
+rubrik_db2_ilist: /opt/ibm/db2/V11.5/instance/db2ilist
+rubrik_db2_discovery_become: true

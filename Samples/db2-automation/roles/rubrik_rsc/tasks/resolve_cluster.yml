@@ -1,0 +1,38 @@
+---
+# Resolve rubrik_rsc_cluster_name to rubrik_rsc_cluster_uuid for the current host.
+# Runs per host so that hosts can be protected by different clusters.
+
+- name: Check cluster name is set
+  ansible.builtin.assert:
+    that: rubrik_rsc_cluster_name | default('') | length > 0
+    fail_msg: "rubrik_rsc_cluster_name is not set for {{ inventory_hostname }}."
+    quiet: true
+
+- name: Query Rubrik clusters
+  ansible.builtin.import_tasks: graphql.yml
+  vars:
+    rubrik_rsc_gql_query: |
+      query RubrikClusters($filter: ClusterFilterInput) {
+        allClusterConnection(filter: $filter) {
+          nodes { id name version status }
+        }
+      }
+    rubrik_rsc_gql_variables:
+      filter:
+        name: "{{ rubrik_rsc_cluster_name }}"
+
+- name: Select cluster by exact name
+  ansible.builtin.set_fact:
+    __rubrik_rsc_cluster: >-
+      {{ rubrik_rsc_gql_data.allClusterConnection.nodes
+         | selectattr('name', 'equalto', rubrik_rsc_cluster_name) | first | default({}) }}
+
+- name: Check cluster was found
+  ansible.builtin.assert:
+    that: __rubrik_rsc_cluster.id is defined
+    fail_msg: "Rubrik cluster '{{ rubrik_rsc_cluster_name }}' was not found in RSC or is not visible to this service account."
+    quiet: true
+
+- name: Store cluster UUID
+  ansible.builtin.set_fact:
+    rubrik_rsc_cluster_uuid: "{{ __rubrik_rsc_cluster.id }}"

@@ -1,0 +1,29 @@
+---
+# Sets rubrik_host_register_id to the RSC ID of the host, or '' if it is not registered.
+
+- name: Query physical hosts
+  ansible.builtin.import_role:
+    name: rubrik_rsc
+    tasks_from: graphql
+  vars:
+    rubrik_rsc_gql_query: |
+      query PhysicalHosts($filter: [Filter!], $hostRoot: HostRoot!) {
+        physicalHosts(filter: $filter, hostRoot: $hostRoot) {
+          nodes { id name }
+        }
+      }
+    rubrik_rsc_gql_variables:
+      hostRoot: LINUX_HOST_ROOT
+      filter:
+        - field: NAME_EXACT_MATCH
+          texts: ["{{ rubrik_host_register_hostname }}"]
+        - field: CLUSTER_ID
+          texts: ["{{ rubrik_rsc_cluster_uuid }}"]
+        - field: IS_RELIC
+          texts: ["false"]
+        - field: IS_REPLICATED
+          texts: ["false"]
+
+- name: Store host ID
+  ansible.builtin.set_fact:
+    rubrik_host_register_id: "{{ (rubrik_rsc_gql_data.physicalHosts.nodes | first | default({})).id | default('') }}"

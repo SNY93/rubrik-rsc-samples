@@ -1,0 +1,22 @@
+---
+# Copy to inventory/hosts.yml (git-ignored) and adjust.
+# Use SSH keys for host access; do not put passwords in this file. Db2 instances are
+# added without a password.
+all:
+  children:
+    db2:
+      vars:
+        ansible_user: ansible
+        ansible_become: true
+
+        rubrik_rsc_cluster_name: my-rubrik-cluster
+        rubrik_db2_sla_name: Gold-Db2
+      hosts:
+        # All Db2 instances on the host are discovered with db2ilist and protected.
+        db2-01.example.com:
+        db2-02.example.com:
+          # Different cluster, only some instances instead of all, and a db2ilist
+          # path for a different Db2 version.
+          rubrik_rsc_cluster_name: my-other-rubrik-cluster
+          rubrik_db2_instances: [db2inst2]
+          rubrik_db2_ilist: /opt/ibm/db2/V12.1/instance/db2ilist

@@ -1,0 +1,24 @@
+---
+# Finds all Db2 instances on the host. db2ilist prints one instance name per line.
+
+- name: List Db2 instances
+  ansible.builtin.command:
+    argv: ["{{ rubrik_db2_ilist }}"]
+  register: __rubrik_db2_ilist_result
+  changed_when: false
+  check_mode: false
+  become: "{{ rubrik_db2_discovery_become }}"
+
+- name: Parse Db2 instances
+  ansible.builtin.set_fact:
+    __rubrik_db2_targets: "{{ __rubrik_db2_ilist_result.stdout_lines | map('trim') | reject('equalto', '') | list }}"
+
+- name: Check at least one Db2 instance was found
+  ansible.builtin.assert:
+    that: __rubrik_db2_targets | length > 0
+    fail_msg: "No Db2 instance found on {{ inventory_hostname }} with {{ rubrik_db2_ilist }}."
+    quiet: true
+
+- name: Show discovered Db2 instances
+  ansible.builtin.debug:
+    msg: "Db2 instances on {{ inventory_hostname }}: {{ __rubrik_db2_targets | join(', ') }}"

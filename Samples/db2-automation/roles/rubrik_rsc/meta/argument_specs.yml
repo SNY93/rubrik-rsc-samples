@@ -1,0 +1,50 @@
+---
+argument_specs:
+  main:
+    short_description: Authenticate to RSC with a service account.
+    description:
+      - Sets C(rubrik_rsc_token), C(rubrik_rsc_url) and C(rubrik_rsc_graphql_url).
+    options:
+      rubrik_rsc_service_account_file:
+        type: str
+        description: Path to the service account JSON downloaded from RSC.
+      rubrik_rsc_client_id:
+        type: str
+        description: Service account client ID (if not using the JSON file).
+      rubrik_rsc_client_secret:
+        type: str
+        no_log: true
+        description: Service account client secret (if not using the JSON file).
+      rubrik_rsc_access_token_uri:
+        type: str
+        description: Token URL, e.g. https://example.my.rubrik.com/api/client_token.
+      rubrik_rsc_validate_certs:
+        type: bool
+        default: true
+        description: Validate TLS certificates of the RSC API.
+      rubrik_rsc_timeout:
+        type: int
+        default: 30
+        description: HTTP timeout in seconds.
+      rubrik_rsc_retries:
+        type: int
+        default: 3
+        description: Retries for transient API errors.
+      rubrik_rsc_delay:
+        type: int
+        default: 5
+        description: Seconds between retries.
+      rubrik_rsc_no_log:
+        type: bool
+        default: true
+        description: Hide API requests and responses from output.
+  resolve_cluster:
+    short_description: Resolve a Rubrik cluster name to its UUID (sets C(rubrik_rsc_cluster_uuid)).
+    options:
+      rubrik_rsc_cluster_name:
+        type: str
+        required: true
+        description: Rubrik cluster name as shown in RSC.
+  logout:
+    short_description: Revoke the RSC session created by the main entry point.
+    options: {}

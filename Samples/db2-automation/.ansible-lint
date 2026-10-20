@@ -1,0 +1,7 @@
+---
+profile: production
+exclude_paths:
+  - .ansible/
+  - inventory/hosts.yml
+# Example inventory uses placeholder values.
+skip_list: []

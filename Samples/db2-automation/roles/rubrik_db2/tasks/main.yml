@@ -1,0 +1,27 @@
+---
+- name: Validate Db2 settings
+  ansible.builtin.assert:
+    that:
+      - rubrik_host_register_id is defined
+      - rubrik_rsc_cluster_uuid is defined
+    fail_msg: >-
+      Run the rubrik_host_register role before this role (it provides rubrik_host_register_id
+      and rubrik_rsc_cluster_uuid).
+    quiet: true
+
+- name: Discover Db2 instances on host
+  ansible.builtin.import_tasks: discover.yml
+  when: rubrik_db2_instances | length == 0
+
+- name: Use configured Db2 instances
+  ansible.builtin.set_fact:
+    __rubrik_db2_targets: "{{ rubrik_db2_instances }}"
+  when: rubrik_db2_instances | length > 0
+
+# Each instance is added, protected and checked for HADR on its own, so one host can run
+# several instances.
+- name: Protect Db2 instances
+  ansible.builtin.include_tasks: instance.yml
+  loop: "{{ __rubrik_db2_targets }}"
+  loop_control:
+    loop_var: rubrik_db2_instance_name

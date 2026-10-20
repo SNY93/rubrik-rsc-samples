@@ -1,0 +1,67 @@
+---
+- name: Load RSC service account file
+  ansible.builtin.include_vars:
+    file: "{{ rubrik_rsc_service_account_file }}"
+    name: __rubrik_rsc_service_account
+  when: rubrik_rsc_service_account_file | length > 0
+  no_log: true
+
+- name: Use credentials from service account file
+  ansible.builtin.set_fact:
+    rubrik_rsc_client_id: "{{ __rubrik_rsc_service_account.client_id }}"
+    rubrik_rsc_client_secret: "{{ __rubrik_rsc_service_account.client_secret }}"
+    rubrik_rsc_access_token_uri: "{{ __rubrik_rsc_service_account.access_token_uri }}"
+  when: __rubrik_rsc_service_account is defined
+  no_log: true
+
+- name: Validate RSC credentials
+  ansible.builtin.assert:
+    that:
+      - rubrik_rsc_client_id | length > 0
+      - rubrik_rsc_client_secret | length > 0
+      - rubrik_rsc_access_token_uri is match('^https?://')
+    fail_msg: >-
+      RSC credentials are missing. Set rubrik_rsc_service_account_file
+      (or RSC_SERVICE_ACCOUNT_FILE), or rubrik_rsc_client_id,
+      rubrik_rsc_client_secret and rubrik_rsc_access_token_uri.
+    quiet: true
+
+- name: Derive RSC API endpoints
+  ansible.builtin.set_fact:
+    rubrik_rsc_url: "{{ rubrik_rsc_access_token_uri | regex_replace('/api/client_token/?$', '') }}"
+    rubrik_rsc_graphql_url: "{{ rubrik_rsc_access_token_uri | regex_replace('/api/client_token/?$', '') }}/api/graphql"
+
+- name: Request RSC access token
+  ansible.builtin.uri:
+    url: "{{ rubrik_rsc_access_token_uri }}"
+    method: POST
+    body_format: json
+    body:
+      grant_type: client_credentials
+      client_id: "{{ rubrik_rsc_client_id }}"
+      client_secret: "{{ rubrik_rsc_client_secret }}"
+    validate_certs: "{{ rubrik_rsc_validate_certs }}"
+    timeout: "{{ rubrik_rsc_timeout }}"
+  register: __rubrik_rsc_token_response
+  # Retry transient errors only; 4xx means bad credentials.
+  until: __rubrik_rsc_token_response.status == 200 or __rubrik_rsc_token_response.status in range(400, 500)
+  retries: "{{ rubrik_rsc_retries }}"
+  delay: "{{ rubrik_rsc_delay }}"
+  failed_when: false
+  check_mode: false
+  delegate_to: localhost
+  become: false
+  no_log: true
+
+- name: Check RSC authentication result
+  ansible.builtin.assert:
+    that: __rubrik_rsc_token_response.status == 200
+    fail_msg: >-
+      RSC authentication failed (HTTP {{ __rubrik_rsc_token_response.status }}):
+      {{ __rubrik_rsc_token_response.json.message | default(__rubrik_rsc_token_response.msg | default('')) }}
+    quiet: true
+
+- name: Store RSC access token
+  ansible.builtin.set_fact:
+    rubrik_rsc_token: "{{ __rubrik_rsc_token_response.json.access_token }}"
+  no_log: true

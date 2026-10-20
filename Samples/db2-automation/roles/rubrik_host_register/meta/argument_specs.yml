@@ -1,0 +1,15 @@
+---
+argument_specs:
+  main:
+    short_description: Register a Linux host with a Rubrik cluster (idempotent).
+    description:
+      - Requires C(rubrik_rsc_token) and C(rubrik_rsc_graphql_url) from the C(rubrik_rsc) role.
+      - Sets C(rubrik_host_register_id).
+    options:
+      rubrik_host_register_hostname:
+        type: str
+        description: Name to register the host under. Defaults to the host's FQDN.
+      rubrik_rsc_cluster_name:
+        type: str
+        required: true
+        description: Rubrik cluster that should protect this host.
